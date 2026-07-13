@@ -11,7 +11,7 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 **▶ Watch the 2-minute demo:**
 
-[![AgentTrace demo video]([https://img.youtube.com/vi/5Bd7ftzNTqw/maxresdefault.jpg](https://youtu.be/5Bd7ftzNTqw))](https://youtu.be/5Bd7ftzNTqw)
+[![AgentTrace demo video](https://youtu.be/5Bd7ftzNTqw)](https://youtu.be/5Bd7ftzNTqw)
 
 **Backend Architecture**
 The production system this replicates is described in
