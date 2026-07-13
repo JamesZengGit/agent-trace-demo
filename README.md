@@ -11,19 +11,32 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 **▶ Watch the 2-minute demo:**
 
-[![AgentTrace demo video](https://img.youtube.com/vi/5Bd7ftzNTqw/maxresdefault.jpg)](https://youtu.be/5Bd7ftzNTqw)
+[![AgentTrace demo video]([https://img.youtube.com/vi/5Bd7ftzNTqw/maxresdefault.jpg](https://youtu.be/5Bd7ftzNTqw))](https://youtu.be/5Bd7ftzNTqw)
 
+**Backend Architecture**
 The production system this replicates is described in
 **[How we built agent observability at 100K events/sec](https://dev.to/aishiteru/how-we-built-agent-observability-at-100k-eventssec-pa1)** —
 that article is the claims half; this repository is the proof half.
 
+Snapshoots:
+
 ![TraceHeatmap — all traces in a window, density by time × latency](docs/img/heatmap.png)
 
-*Above: the TraceHeatmap page under live fleet traffic. Below: one trace of
-the misbehaving agent — the amber bars are the model checker catching a
-prompt injection and the policy engine catching an uncatalogued destination.*
+*Above: the TraceHeatmap page under live fleet traffic.*
 
 ![TraceDetail — the misbehaving agent caught](docs/img/tracedetail.png)
+
+*Above: one trace of the misbehaving agent — the amber bars are the model checker catching a prompt injection and the policy engine catching an uncatalogued destination.*
+
+**To start it: make this open-source project fully on your device**
+
+1. Download to your local
+
+```
+git clone github.com/JamesZengGit/agent-trace-demo.git
+```
+
+2. setup
 
 ```
 make up      # docker compose up → live dashboard on :3000 in under a minute
