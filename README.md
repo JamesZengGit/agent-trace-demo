@@ -9,7 +9,13 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 > **An SDK belongs to the dev team; the proxy belongs to the security team.**
 
-<!-- GIF: dashboard catching the misbehaving agent (recorded after build) -->
+**▶ Watch the 2-minute demo:**
+
+[![AgentTrace demo video](https://img.youtube.com/vi/5Bd7ftzNTqw/maxresdefault.jpg)](https://youtu.be/5Bd7ftzNTqw)
+
+The production system this replicates is described in
+**[How we built agent observability at 100K events/sec](https://dev.to/aishiteru/how-we-built-agent-observability-at-100k-eventssec-pa1)** —
+that article is the claims half; this repository is the proof half.
 
 ![TraceHeatmap — all traces in a window, density by time × latency](docs/img/heatmap.png)
 
@@ -262,9 +268,11 @@ Honest scale note: the article's 100K events/sec was a production fleet on
 production hardware. The `make bench` numbers here are one machine running
 all seven services plus the database — the point is that the numbers are
 *measured and reproducible*, not projected. The known cost ceiling of the
-EAV detail table at high scale is real; today I'd tier detail rows into
-columnar/object storage after a retention window and keep Postgres for the
-summary path.
+EAV detail table at high scale is real (~3.6 KB per span at demo pace); a
+built-in retention sweep ages out traces older than `AT_RETENTION` (default
+24 h, `0` disables) so the table stops growing after day one. At production
+scale I'd tier aged detail rows into columnar/object storage instead of
+deleting, and keep Postgres for the summary path.
 
 ## Run it
 
