@@ -1,0 +1,8 @@
+bin/
+.run/
+dashboard/node_modules/
+dashboard/.next/
+docs/bench/*.csv
+docs/chaos/*.json
+*.log
+docs/log.md

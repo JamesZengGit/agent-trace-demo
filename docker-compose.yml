@@ -1,0 +1,82 @@
+# AgentTrace — one command: `docker compose up` -> live dashboard on :3000
+# in under a minute. NATS JetStream stands in for GCP Pub/Sub behind the
+# transport interface; everything runs offline.
+
+x-go-build: &go-build
+  context: .
+  dockerfile: deploy/go.Dockerfile
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agenttrace
+      POSTGRES_PASSWORD: agenttrace
+      POSTGRES_DB: agenttrace
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agenttrace"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js"]
+    ports: ["4222:4222"]
+
+  mocksvc:
+    build: {<<: *go-build, args: {SERVICE: mocksvc}}
+    ports: ["9100:9100"]
+
+  collector:
+    build: {<<: *go-build, args: {SERVICE: collector}}
+    environment:
+      NATS_URL: nats://nats:4222
+    ports: ["7100:7100"]
+    depends_on: [nats]
+
+  proxy:
+    build: {<<: *go-build, args: {SERVICE: proxy}}
+    environment:
+      COLLECTOR_URL: ws://collector:7100/ingest
+      POLICY_FILE: /configs/policy.yaml
+      AT_REATTACH: ${AT_REATTACH:-on}
+    ports: ["8080:8080"]
+    depends_on: [collector]
+
+  processor:
+    build: {<<: *go-build, args: {SERVICE: processor}}
+    environment:
+      NATS_URL: nats://nats:4222
+      POSTGRES_DSN: postgres://agenttrace:agenttrace@postgres:5432/agenttrace
+    ports: ["7200:7200"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats: {condition: service_started}
+
+  api:
+    build: {<<: *go-build, args: {SERVICE: api}}
+    environment:
+      NATS_URL: nats://nats:4222
+      POSTGRES_DSN: postgres://agenttrace:agenttrace@postgres:5432/agenttrace
+    ports: ["7000:7000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats: {condition: service_started}
+
+  fleet:
+    build: {<<: *go-build, args: {SERVICE: fleet}}
+    environment:
+      PROXY_URL: http://proxy:8080
+      MOCKSVC_URL: http://mocksvc:9100
+      FLEET_SPEED: ${FLEET_SPEED:-1}
+    depends_on: [proxy, mocksvc]
+
+  dashboard:
+    build:
+      context: dashboard
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:7000
+    ports: ["3000:3000"]
+    depends_on: [api]

@@ -1,0 +1,49 @@
+# Policy engine — access restrictions per agent.
+# A destination is host+path. Patterns support a trailing "*" wildcard.
+# Violations produce WARNINGS on the span (the trace layer observes and
+# flags; enforcement belongs to the wider governance platform).
+#
+# Note what is absent: no agent is allowed to reach /external/* — that is the
+# uncatalogued destination the misbehaving agent talks to.
+rules:
+  - agent: "*"
+    allow:
+      - "*/v1/chat/completions"   # every agent may call the sanctioned LLM
+      - "*/user/deliver"          # and deliver results to its user
+
+  - agent: support-triage
+    allow:
+      - "*/db/tickets-*"
+      - "*/tools/send_email"
+
+  - agent: sales-research
+    allow:
+      - "*/tools/web_search"
+
+  - agent: finops-audit
+    allow:
+      - "*/db/spend-*"
+
+  - agent: data-sync
+    allow:
+      - "*/db/source-*"
+      - "*/db/target-*"
+
+  - agent: inventory-sync
+    allow:
+      - "*/db/inventory-*"
+
+  # Synthetic load drivers (make bench / make chaos) get unique per-run agent
+  # IDs; agent patterns support the same "*" wildcards as destinations.
+  - agent: "loadgen*"
+    allow:
+      - "*/db/bench-*"
+  - agent: "bench-*"
+    allow:
+      - "*/db/bench-*"
+  - agent: "chaos-*"
+    allow:
+      - "*/db/bench-*"
+  - agent: "errtest*"
+    allow:
+      - "*/v1/chat/completions"
