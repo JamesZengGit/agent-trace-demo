@@ -17,6 +17,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AppHeader from './AppHeader';
 import Waterfall from './Waterfall';
 import BehaviorTree from './BehaviorTree';
+import NetworkMap from './NetworkMap';
 import SpanSheet, { SHEET_WIDTH } from './SpanSheet';
 import {
   API_URL,
@@ -49,6 +50,13 @@ export default function TraceDetailClient({ traceId }: { traceId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
+
+  // Deep-link a tab with ?tab=0|1|2 (read once on mount; kept out of
+  // useSearchParams to avoid the Suspense boundary requirement).
+  useEffect(() => {
+    const v = Number(new URLSearchParams(window.location.search).get('tab'));
+    if (Number.isInteger(v) && v >= 0 && v <= 2) setTab(v);
+  }, []);
   const [selectedSpan, setSelectedSpan] = useState<Span | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -233,6 +241,10 @@ export default function TraceDetailClient({ traceId }: { traceId: string }) {
                 label="Decision Tree"
                 sx={{ textTransform: 'none', minHeight: 42 }}
               />
+              <Tab
+                label="Network Map"
+                sx={{ textTransform: 'none', minHeight: 42 }}
+              />
             </Tabs>
           </Paper>
 
@@ -260,6 +272,10 @@ export default function TraceDetailClient({ traceId }: { traceId: string }) {
               selectedSpanId={selectedSpan?.span_id ?? null}
               onSelectSpan={setSelectedSpan}
             />
+          )}
+
+          {!loading && detail && tab === 2 && (
+            <NetworkMap highlightAgent={detail.summary.agent_id} />
           )}
 
           {!loading && !detail && !error && (

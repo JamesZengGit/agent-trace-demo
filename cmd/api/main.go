@@ -141,6 +141,41 @@ func (a *api) traces(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"traces": list})
 }
 
+// topology serves the fleet network map: agents -> backends connectivity,
+// derived automatically from captured traffic (nothing is configured).
+// Default window: last 24 hours. limit_agents caps to the busiest N agents.
+func (a *api) topology(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	to := time.Now()
+	from := to.Add(-24 * time.Hour)
+	if v := q.Get("from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			from = t
+		}
+	}
+	if v := q.Get("to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			to = t
+		}
+	}
+	limitAgents, _ := strconv.Atoi(q.Get("limit_agents"))
+	topo, err := a.st.QueryTopology(r.Context(), from, to, limitAgents)
+	if err != nil {
+		httpErr(w, err)
+		return
+	}
+	if topo.Agents == nil {
+		topo.Agents = []store.TopologyAgent{}
+	}
+	if topo.Backends == nil {
+		topo.Backends = []store.TopologyBackend{}
+	}
+	if topo.Edges == nil {
+		topo.Edges = []store.TopologyEdge{}
+	}
+	writeJSON(w, topo)
+}
+
 func (a *api) trace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	summary, spans, tree, err := a.st.GetTrace(r.Context(), id)
@@ -239,6 +274,7 @@ func main() {
 	mux.HandleFunc("GET /api/metrics", a.metrics)
 	mux.HandleFunc("GET /api/traces", a.traces)
 	mux.HandleFunc("GET /api/traces/{id}", a.trace)
+	mux.HandleFunc("GET /api/topology", a.topology)
 	mux.HandleFunc("/api/live", a.hub.serve)
 	mux.HandleFunc("POST /otel/v1/traces", a.otelIngest)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {

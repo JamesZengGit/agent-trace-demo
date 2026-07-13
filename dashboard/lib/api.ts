@@ -94,6 +94,31 @@ export type LiveEvent =
   | { type: 'trace_upsert'; summary: TraceSummary }
   | { type: 'span'; span: Span };
 
+export interface TopologyAgent {
+  id: string;
+  calls: number;
+}
+
+export interface TopologyBackend {
+  id: string;
+  label: string;
+  kind: SpanType;
+}
+
+export interface TopologyEdge {
+  agent: string;
+  backend: string;
+  calls: number;
+  errors: number;
+  warnings: number;
+}
+
+export interface Topology {
+  agents: TopologyAgent[];
+  backends: TopologyBackend[];
+  edges: TopologyEdge[];
+}
+
 // ---------------------------------------------------------------------------
 // Fetchers
 // ---------------------------------------------------------------------------
@@ -132,4 +157,10 @@ export async function fetchTraces(
 
 export function fetchTrace(traceId: string): Promise<TraceDetail> {
   return getJson<TraceDetail>(`/api/traces/${encodeURIComponent(traceId)}`);
+}
+
+/** Fleet network map (default window: last 24h server-side). */
+export function fetchTopology(limitAgents = 0): Promise<Topology> {
+  const q = limitAgents > 0 ? `?limit_agents=${limitAgents}` : '';
+  return getJson<Topology>(`/api/topology${q}`);
 }

@@ -65,6 +65,26 @@ Error/warning checkbox filtering happens client-side (demo scale).
 }
 ```
 
+### GET /api/topology?from=RFC3339&to=RFC3339&limit_agents=N
+Fleet network map, derived automatically from captured traffic — every agent
+observed in the window and every backend it called. Nothing is configured;
+the topology is what the proxy saw. Defaults: last 24 h, all agents
+(`limit_agents` > 0 keeps only the busiest N).
+```json
+{
+  "agents":   [ { "id": "support-triage", "calls": 142 } ],
+  "backends": [ { "id": "llm", "label": "LLM API", "kind": "llm_call" },
+                { "id": "tool:web_search", "label": "Tool: web_search", "kind": "tool_call" },
+                { "id": "ext:mocksvc:9100", "label": "External: mocksvc:9100", "kind": "external" } ],
+  "edges":    [ { "agent": "support-triage", "backend": "llm",
+                  "calls": 142, "errors": 3, "warnings": 0 } ]
+}
+```
+An edge means "this agent has called this backend" (static connectivity);
+counts power tooltips and error/warning marks. Backends are grouped: one
+`llm` node, one `db` node, one `user` node, one node per tool, one per
+external host.
+
 ### WS /api/live
 Server pushes JSON `LiveEvent` frames; client sends nothing (pings ok).
 ```json
