@@ -50,6 +50,7 @@ services:
     environment:
       NATS_URL: nats://nats:4222
       POSTGRES_DSN: postgres://agenttrace:agenttrace@postgres:5432/agenttrace
+      AT_RETENTION: ${AT_RETENTION:-24h}  # traces older than this age out; "0" disables
     ports: ["7200:7200"]
     depends_on:
       postgres: {condition: service_healthy}

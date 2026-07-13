@@ -103,6 +103,7 @@ type processor struct {
 	spans  uint64
 
 	storageDropped atomic.Uint64
+	retained       atomic.Uint64 // traces removed by the retention sweep
 }
 
 func newID() string {
@@ -252,6 +253,39 @@ func (p *processor) closeLocked(ctx context.Context, agentID string, ot *openTra
 	}()
 }
 
+// retention ages out traces older than the retention window (AT_RETENTION,
+// default 24h; 0 disables). Runs at startup and every 10 minutes — without
+// it the detail table grows ~0.5 GB/day at demo pace and never shrinks.
+func (p *processor) retention(ctx context.Context, keep time.Duration) {
+	if keep <= 0 {
+		log.Printf("processor: retention disabled")
+		return
+	}
+	run := func() {
+		details, traces, err := p.st.DeleteTracesBefore(ctx, time.Now().Add(-keep))
+		if err != nil {
+			log.Printf("processor: retention sweep failed: %v", err)
+			return
+		}
+		if traces > 0 {
+			log.Printf("processor: retention swept %d traces (%d detail rows) older than %s",
+				traces, details, keep)
+		}
+		p.retained.Add(uint64(traces))
+	}
+	run()
+	t := time.NewTicker(10 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
+}
+
 // sweep closes idle traces (no terminal span seen).
 func (p *processor) sweep(ctx context.Context) {
 	t := time.NewTicker(2 * time.Second)
@@ -318,6 +352,16 @@ func main() {
 	}
 	go p.sweep(ctx)
 
+	retention := 24 * time.Hour
+	if v := os.Getenv("AT_RETENTION"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatalf("invalid AT_RETENTION %q: %v", v, err)
+		}
+		retention = d
+	}
+	go p.retention(ctx, retention)
+
 	addr := env("PROCESSOR_ADDR", ":7200")
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		p.mu.Lock()
@@ -326,6 +370,7 @@ func main() {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true, "open_traces": len(p.open), "closed_traces": p.closed, "spans": p.spans,
 			"storage_dropped": p.storageDropped.Load(),
+			"retention_swept": p.retained.Load(),
 		})
 	})
 	log.Printf("processor running; health on %s", addr)

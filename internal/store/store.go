@@ -348,6 +348,30 @@ func spanFromDetails(t *model.TraceSummary, spanID string, kv map[string]string)
 	return sp
 }
 
+// DeleteTracesBefore removes traces (summary + all detail rows) whose
+// start_time is older than cutoff. This is the retention sweep: at demo pace
+// the EAV detail table grows ~0.5 GB/day, so old traces age out instead of
+// accumulating forever. Detail rows go first so a failure between the two
+// statements can only leave summaries without details, never unqueryable
+// detail rows.
+func (s *Store) DeleteTracesBefore(ctx context.Context, cutoff time.Time) (details, traces int64, err error) {
+	res, err := s.db.ExecContext(ctx, `
+DELETE FROM trace_detail d
+USING trace_summary ts
+WHERE d.trace_id = ts.trace_id AND ts.start_time < $1`, cutoff)
+	if err != nil {
+		return 0, 0, err
+	}
+	details, _ = res.RowsAffected()
+	res, err = s.db.ExecContext(ctx,
+		`DELETE FROM trace_summary WHERE start_time < $1`, cutoff)
+	if err != nil {
+		return details, 0, err
+	}
+	traces, _ = res.RowsAffected()
+	return details, traces, nil
+}
+
 // CountSpans reports stored span rows — used by bench and chaos scripts.
 func (s *Store) CountSpans(ctx context.Context) (int, error) {
 	var n int
