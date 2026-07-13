@@ -19,8 +19,10 @@ Single source of truth for ports, HTTP API, and WebSocket protocol.
 All responses `application/json`; CORS `*`.
 
 ### GET /api/metrics?from=RFC3339&to=RFC3339
+`trace_count` is within the window; `total_trace_count` is all-time.
 ```json
-{ "trace_count": 128, "avg_latency_ms": 2144.5, "error_count": 7, "warning_count": 3 }
+{ "trace_count": 128, "total_trace_count": 4213, "avg_latency_ms": 2144.5,
+  "error_count": 7, "warning_count": 3 }
 ```
 
 ### GET /api/traces?from=RFC3339&to=RFC3339&limit=1000

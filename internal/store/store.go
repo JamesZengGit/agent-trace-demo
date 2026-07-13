@@ -240,12 +240,14 @@ func (s *Store) QueryTraces(ctx context.Context, f TraceFilter) ([]*model.TraceS
 	return out, rows.Err()
 }
 
-// Metrics is the heatmap page's top bar: trace count, average latency, errors.
+// Metrics is the heatmap page's top bar: trace counts (focus window and
+// all-time), average latency, errors.
 type Metrics struct {
-	TraceCount   int     `json:"trace_count"`
-	AvgLatencyMS float64 `json:"avg_latency_ms"`
-	ErrorCount   int     `json:"error_count"`
-	WarningCount int     `json:"warning_count"`
+	TraceCount      int     `json:"trace_count"` // within the queried window
+	TotalTraceCount int     `json:"total_trace_count"`
+	AvgLatencyMS    float64 `json:"avg_latency_ms"`
+	ErrorCount      int     `json:"error_count"`
+	WarningCount    int     `json:"warning_count"`
 }
 
 func (s *Store) QueryMetrics(ctx context.Context, from, to time.Time) (*Metrics, error) {
@@ -254,9 +256,11 @@ func (s *Store) QueryMetrics(ctx context.Context, from, to time.Time) (*Metrics,
 SELECT COUNT(*),
        COALESCE(AVG(latency_ms) FILTER (WHERE status = 'closed'), 0),
        COUNT(*) FILTER (WHERE error_count > 0),
-       COUNT(*) FILTER (WHERE warning_count > 0)
+       COUNT(*) FILTER (WHERE warning_count > 0),
+       (SELECT COUNT(*) FROM trace_summary)
 FROM trace_summary WHERE start_time >= $1 AND start_time <= $2`,
-		from, to).Scan(&m.TraceCount, &m.AvgLatencyMS, &m.ErrorCount, &m.WarningCount)
+		from, to).Scan(&m.TraceCount, &m.AvgLatencyMS, &m.ErrorCount, &m.WarningCount,
+		&m.TotalTraceCount)
 	return &m, err
 }
 

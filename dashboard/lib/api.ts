@@ -78,6 +78,7 @@ export interface BehaviorNode {
 
 export interface Metrics {
   trace_count: number;
+  total_trace_count: number;
   avg_latency_ms: number;
   error_count: number;
   warning_count: number;

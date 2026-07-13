@@ -42,17 +42,24 @@ function StatTile({
 
 export default function MetricsBar({
   metrics,
+  totalKnown,
   loading,
 }: {
   metrics: Metrics | null;
+  totalKnown: boolean;
   loading: boolean;
 }) {
   const m = metrics;
   return (
     <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
       <StatTile
-        label="Trace count"
+        label="Session Trace Count"
         value={m ? String(m.trace_count) : '—'}
+        loading={loading}
+      />
+      <StatTile
+        label="Total Trace Count"
+        value={m && totalKnown ? String(m.total_trace_count) : '—'}
         loading={loading}
       />
       <StatTile

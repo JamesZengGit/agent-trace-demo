@@ -14,6 +14,7 @@ import Heatmap from './Heatmap';
 import TraceTable from './TraceTable';
 import {
   API_URL,
+  fetchMetrics,
   fetchTraces,
   type LiveEvent,
   type Metrics,
@@ -31,12 +32,17 @@ import {
 
 const PRUNE_MS = 60_000;
 const RETRY_MS = 5_000;
+const TOTAL_SYNC_MS = 15_000;
 
 export default function HomeClient() {
   const [presetKey, setPresetKey] = useState(DEFAULT_PRESET_KEY);
   const [filters, setFilters] = useState<TraceFilters>(DEFAULT_FILTERS);
   const [selection, setSelection] = useState<CellSelection | null>(null);
   const [traces, setTraces] = useState<Record<string, TraceSummary>>({});
+  const [totalTraces, setTotalTraces] = useState<number | null>(null);
+  // Trace births already counted optimistically, so a duplicate live event
+  // can't double-increment the total between server syncs.
+  const bornIds = useRef<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [apiDown, setApiDown] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -84,6 +90,25 @@ export default function HomeClient() {
     return () => clearInterval(t);
   }, [apiDown, loadWindow]);
 
+  // Total trace count: the server is the source of truth, re-synced on an
+  // interval; between syncs the live edge increments it optimistically the
+  // moment a brand-new trace is born.
+  useEffect(() => {
+    const sync = async () => {
+      try {
+        const to = new Date();
+        const m = await fetchMetrics(new Date(to.getTime() - 60_000), to);
+        bornIds.current.clear();
+        setTotalTraces(m.total_trace_count);
+      } catch {
+        // loadWindow owns the api-down banner; totals just wait for the next sync
+      }
+    };
+    sync();
+    const t = setInterval(sync, TOTAL_SYNC_MS);
+    return () => clearInterval(t);
+  }, []);
+
   // Bound memory: drop traces that scrolled far out of every window.
   useEffect(() => {
     const t = setInterval(async () => {
@@ -104,7 +129,18 @@ export default function HomeClient() {
   // WebSocket carries the live edge only.
   const onEvent = useCallback((ev: LiveEvent) => {
     if (ev.type !== 'trace_upsert') return;
-    setTraces((prev) => ({ ...prev, [ev.summary.trace_id]: ev.summary }));
+    const s = ev.summary;
+    // A trace's first upsert (running, single span) is its birth: bump the
+    // all-time total now instead of waiting for the next server sync.
+    if (
+      s.status === 'running' &&
+      s.span_count === 1 &&
+      !bornIds.current.has(s.trace_id)
+    ) {
+      bornIds.current.add(s.trace_id);
+      setTotalTraces((t) => (t === null ? t : t + 1));
+    }
+    setTraces((prev) => ({ ...prev, [s.trace_id]: s }));
   }, []);
 
   const { connected } = useLive({ onEvent, onReconnect: loadWindow });
@@ -140,11 +176,12 @@ export default function HomeClient() {
         : closed.reduce((s, t) => s + t.latency_ms, 0) / closed.length;
     return {
       trace_count: inWindow.length,
+      total_trace_count: totalTraces ?? 0,
       avg_latency_ms: avg,
       error_count: inWindow.filter((t) => t.error_count > 0).length,
       warning_count: inWindow.filter((t) => t.warning_count > 0).length,
     };
-  }, [inWindow]);
+  }, [inWindow, totalTraces]);
 
   const filtered = useMemo(
     () =>
@@ -189,7 +226,11 @@ export default function HomeClient() {
           </Alert>
         )}
 
-        <MetricsBar metrics={metrics} loading={loading} />
+        <MetricsBar
+          metrics={metrics}
+          totalKnown={totalTraces !== null}
+          loading={loading}
+        />
 
         <Box sx={{ display: 'flex', gap: 2, mt: 2, alignItems: 'flex-start' }}>
           <FiltersPanel
