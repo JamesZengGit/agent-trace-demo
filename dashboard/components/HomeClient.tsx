@@ -14,7 +14,6 @@ import Heatmap from './Heatmap';
 import TraceTable from './TraceTable';
 import {
   API_URL,
-  fetchMetrics,
   fetchTraces,
   type LiveEvent,
   type Metrics,
@@ -30,7 +29,7 @@ import {
   type CellSelection,
 } from '@/lib/buckets';
 
-const METRICS_REFRESH_MS = 15_000;
+const PRUNE_MS = 60_000;
 const RETRY_MS = 5_000;
 
 export default function HomeClient() {
@@ -38,7 +37,6 @@ export default function HomeClient() {
   const [filters, setFilters] = useState<TraceFilters>(DEFAULT_FILTERS);
   const [selection, setSelection] = useState<CellSelection | null>(null);
   const [traces, setTraces] = useState<Record<string, TraceSummary>>({});
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiDown, setApiDown] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -62,14 +60,10 @@ export default function HomeClient() {
     const to = new Date();
     const from = new Date(to.getTime() - preset.ms);
     try {
-      const [list, m] = await Promise.all([
-        fetchTraces(from, to),
-        fetchMetrics(from, to),
-      ]);
+      const list = await fetchTraces(from, to);
       const map: Record<string, TraceSummary> = {};
       for (const t of list) map[t.trace_id] = t;
       setTraces(map);
-      setMetrics(m);
       setApiDown(false);
     } catch {
       setApiDown(true);
@@ -90,18 +84,9 @@ export default function HomeClient() {
     return () => clearInterval(t);
   }, [apiDown, loadWindow]);
 
-  // Keep the metrics tiles honest as the live window slides.
+  // Bound memory: drop traces that scrolled far out of every window.
   useEffect(() => {
     const t = setInterval(async () => {
-      const to = new Date();
-      const from = new Date(to.getTime() - preset.ms);
-      try {
-        setMetrics(await fetchMetrics(from, to));
-        setApiDown(false);
-      } catch {
-        setApiDown(true);
-      }
-      // Bound memory: drop traces that scrolled far out of every window.
       const cutoff = Date.now() - 25 * 3600_000;
       setTraces((prev) => {
         const next: Record<string, TraceSummary> = {};
@@ -112,7 +97,7 @@ export default function HomeClient() {
           ? prev
           : next;
       });
-    }, METRICS_REFRESH_MS);
+    }, PRUNE_MS);
     return () => clearInterval(t);
   }, [preset.ms]);
 
@@ -144,6 +129,22 @@ export default function HomeClient() {
     );
     return list;
   }, [traces, grid]);
+
+  // Metrics derive from the same trace set as the heatmap and table, so all
+  // three update together the instant a live event lands (no separate poll).
+  const metrics = useMemo<Metrics>(() => {
+    const closed = inWindow.filter((t) => t.status === 'closed');
+    const avg =
+      closed.length === 0
+        ? 0
+        : closed.reduce((s, t) => s + t.latency_ms, 0) / closed.length;
+    return {
+      trace_count: inWindow.length,
+      avg_latency_ms: avg,
+      error_count: inWindow.filter((t) => t.error_count > 0).length,
+      warning_count: inWindow.filter((t) => t.warning_count > 0).length,
+    };
+  }, [inWindow]);
 
   const filtered = useMemo(
     () =>
