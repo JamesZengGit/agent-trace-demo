@@ -2,6 +2,10 @@
 
 **Network-layer observability for AI agents. Zero agent code changes.**
 
+This is an NDA-free, fully open-source re-engineering of a production
+system I built — every line of code, every design decision, and every
+measured result is public and reproducible on your machine.
+
 AgentTrace watches what AI agents actually do — every LLM call, tool call,
 database query, and outbound request — by capturing traffic at the network
 layer. No SDK, no instrumentation, no redeploys. The security team deploys
@@ -11,27 +15,28 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 **What makes it different**
 
-- **No SDK, no code changes.** Most monitoring tools ask every engineering
-  team to install the vendor's library inside each agent and redeploy it —
-  weeks of integration work, repeated for every team and language. And an
-  unsanctioned or malicious agent simply won't install your library.
-  AgentTrace instead watches the network traffic agents already produce:
-  deploy one proxy and every agent in the company is visible immediately,
-  with zero work from developers.
-- **It sees what agents do, not just who they are.** Identity and access
-  tools can tell you an agent's name and what it is *allowed* to touch.
-  AgentTrace records what the agent *actually did* — which services it
-  called, what data it read, and where it sent the results.
-- **Trace missions = agent behaviors.** Instead of showing thousands of
-  disconnected network calls, AgentTrace groups everything an agent did into
-  one readable mission — "the inventory agent fetched stock records, asked
-  the model to reconcile them, then sent data somewhere it never should" —
-  so a reviewer reads behaviors, not packets.
-- **Fully offline and self-hosted.** For the team: it runs entirely on the
-  company's own machines — nothing to sign up for, works in locked-down
-  environments. For the business: prompts, responses, and customer data
-  never leave the company and no outside vendor ever sees them — the
-  requirement security and compliance buyers start with.
+- **Zero work from developers.** Other monitoring tools need every
+  engineering team to install a library, wire it up, and redeploy — per
+  agent, per language, on their schedule. AgentTrace skips all of that. You
+  point agent traffic through one proxy, and every agent in the company
+  shows up automatically — even ones nobody told you about.
+
+- **It watches what agents actually do.** Permission systems can tell you
+  what an agent is *allowed* to do. AgentTrace shows you what it *did* —
+  which models it called, what data it touched, and where the results went.
+  That difference is how you catch the agent that follows a poisoned
+  instruction and sends records somewhere it shouldn't.
+
+- **You read behaviors, not packets.** Raw network logs are thousands of
+  lines no one has time for. AgentTrace groups calls into missions you can
+  read like a story: "the inventory agent fetched records, asked the model
+  to reconcile them, then quietly posted everything to an outside server."
+  A security reviewer sees intent, not noise.
+
+- **Nothing leaves the building.** It runs entirely on your own machines —
+  no cloud account, no vendor dashboard, nothing to sign up for. Prompts,
+  model responses, and customer data stay inside your walls, which is
+  usually the first thing a security or compliance buyer asks about.
 
 **▶ Watch the 2-minute demo:**
 
