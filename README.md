@@ -16,6 +16,7 @@ one proxy on infrastructure they own and sees every agent immediately.
 </a>
 
 **Backend Architecture**
+
 The entire backend design process of the production system this replicates is described in
 **[How we built agent observability at 100K events/sec](https://dev.to/aishiteru/how-we-built-agent-observability-at-100k-eventssec-pa1)** —
 that article is the real production-level.
