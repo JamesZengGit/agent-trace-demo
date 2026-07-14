@@ -11,8 +11,8 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 **▶ Watch the 2-minute demo:**
 
-<a href="[https://youtu.be](https://youtu.be/5Bd7ftzNTqw)" target="_blank">
-  <img src="[https://youtube.com](https://img.youtube.com/vi/5Bd7ftzNTqw/maxresdefault.jpg)" alt="Watch the video" />
+<a href="https://youtu.be/5Bd7ftzNTqw" target="_blank">
+  <img src="https://img.youtube.com/vi/5Bd7ftzNTqw/maxresdefault.jpg" alt="Watch the video" />
 </a>
 
 **Backend Architecture**
