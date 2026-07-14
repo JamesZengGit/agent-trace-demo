@@ -16,10 +16,13 @@ one proxy on infrastructure they own and sees every agent immediately.
 **What makes it different**
 
 - **Zero work from developers.** Other monitoring tools need every
-  engineering team to install a library, wire it up, and redeploy — per
-  agent, per language, on their schedule. AgentTrace skips all of that. You
-  point agent traffic through one proxy, and every agent in the company
-  shows up automatically — even ones nobody told you about.
+  engineering team to add a library to their code, configure it, and
+  redeploy — for every agent, in every language. That's months of
+  coordination before you see anything, and the security team has to wait
+  on every dev team's schedule. We skip all of that. It watches the network
+  traffic that agents already produce, so there's nothing to install,
+  nothing to integrate, and new agents are visible the moment they start
+  talking — no coordination needed.
 
 - **It watches what agents actually do.** Permission systems can tell you
   what an agent is *allowed* to do. AgentTrace shows you what it *did* —
