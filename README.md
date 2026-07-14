@@ -11,16 +11,27 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 **What makes it different**
 
-- **No SDK, no code changes.** Capture happens at the network layer, so every
-  agent is covered the moment it talks — including unsanctioned "shadow
-  agents." Malicious actors will not use your SDK.
-- **It sees what agents do, not who they are.** Identity and access tools know
-  *who* an agent is; AgentTrace records *what it is actually doing* on the wire.
-- **Trace missions, not flat call chains.** Spans are the leaves and branches;
-  the mission is the trunk — the unit of observation is what the agent was
-  trying to do, not one request.
-- **Fully offline and self-hosted.** The security team owns the proxy and the
-  data. Nothing leaves the environment; no vendor ever sees a prompt.
+- **No SDK, no code changes.** Most monitoring tools ask every engineering
+  team to install the vendor's library inside each agent and redeploy it —
+  weeks of integration work, repeated for every team and language. And an
+  unsanctioned or malicious agent simply won't install your library.
+  AgentTrace instead watches the network traffic agents already produce:
+  deploy one proxy and every agent in the company is visible immediately,
+  with zero work from developers.
+- **It sees what agents do, not just who they are.** Identity and access
+  tools can tell you an agent's name and what it is *allowed* to touch.
+  AgentTrace records what the agent *actually did* — which services it
+  called, what data it read, and where it sent the results.
+- **Trace missions = agent behaviors.** Instead of showing thousands of
+  disconnected network calls, AgentTrace groups everything an agent did into
+  one readable mission — "the inventory agent fetched stock records, asked
+  the model to reconcile them, then sent data somewhere it never should" —
+  so a reviewer reads behaviors, not packets.
+- **Fully offline and self-hosted.** For the team: it runs entirely on the
+  company's own machines — nothing to sign up for, works in locked-down
+  environments. For the business: prompts, responses, and customer data
+  never leave the company and no outside vendor ever sees them — the
+  requirement security and compliance buyers start with.
 
 **▶ Watch the 2-minute demo:**
 
