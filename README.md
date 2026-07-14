@@ -9,6 +9,19 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 > **An SDK belongs to the dev team; the proxy belongs to the security team.**
 
+**What makes it different**
+
+- **No SDK, no code changes.** Capture happens at the network layer, so every
+  agent is covered the moment it talks — including unsanctioned "shadow
+  agents." Malicious actors will not use your SDK.
+- **It sees what agents do, not who they are.** Identity and access tools know
+  *who* an agent is; AgentTrace records *what it is actually doing* on the wire.
+- **Trace missions, not flat call chains.** Spans are the leaves and branches;
+  the mission is the trunk — the unit of observation is what the agent was
+  trying to do, not one request.
+- **Fully offline and self-hosted.** The security team owns the proxy and the
+  data. Nothing leaves the environment; no vendor ever sees a prompt.
+
 **▶ Watch the 2-minute demo:**
 
 <a href="https://youtu.be/5Bd7ftzNTqw" target="_blank">
