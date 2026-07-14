@@ -16,30 +16,26 @@ one proxy on infrastructure they own and sees every agent immediately.
 **What makes it different**
 
 - **Zero work from developers.** Other monitoring tools need every
-  engineering team to add a library to their code, configure it, and
-  redeploy — for every agent, in every language. That's months of
-  coordination before you see anything, and the security team has to wait
-  on every dev team's schedule. We skip all of that. It watches the network
-  traffic that agents already produce, so there's nothing to install,
-  nothing to integrate, and new agents are visible the moment they start
-  talking — no coordination needed.
+  engineering team to install a library, wire it up, and redeploy — per
+  agent, per language, on their schedule. AgentTrace skips all of that. You
+  point agent traffic through one proxy, and every agent in the company
+  shows up automatically — even ones nobody told you about.
 
 - **It watches what agents actually do.** Permission systems can tell you
   what an agent is *allowed* to do. AgentTrace shows you what it *did* —
   which models it called, what data it touched, and where the results went.
-  That difference is how you catch the agent that follows a poisoned
-  instruction and sends records somewhere it shouldn't.
+  That's how you catch the agent that follows a poisoned instruction and
+  sends records somewhere it shouldn't.
 
-- **You read behaviors, not packets.** Raw network logs are thousands of
-  lines no one has time for. AgentTrace groups calls into missions you can
-  read like a story: "the inventory agent fetched records, asked the model
-  to reconcile them, then quietly posted everything to an outside server."
-  A security reviewer sees intent, not noise.
+- **You read behaviors, not packets.** AgentTrace groups thousands of raw
+  network calls into missions you read like a story: "the inventory agent
+  fetched records, asked the model to reconcile them, then quietly posted
+  everything to an outside server." A reviewer sees intent, not noise.
 
 - **Nothing leaves the building.** It runs entirely on your own machines —
   no cloud account, no vendor dashboard, nothing to sign up for. Prompts,
-  model responses, and customer data stay inside your walls, which is
-  usually the first thing a security or compliance buyer asks about.
+  model responses, and customer data stay inside your walls — the first
+  thing a security or compliance buyer asks about.
 
 **▶ Watch the 2-minute demo:**
 
@@ -49,9 +45,8 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 **Backend Architecture**
 
-The entire backend design process of the production system this replicates is described in
-**[How we built agent observability at 100K events/sec](https://dev.to/aishiteru/how-we-built-agent-observability-at-100k-eventssec-pa1)** —
-that article describes the real production-level system.
+The full backend design story of the production system this replicates:
+**[How we built agent observability at 100K events/sec](https://dev.to/aishiteru/how-we-built-agent-observability-at-100k-eventssec-pa1)**.
 
 Snapshots:
 
