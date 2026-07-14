@@ -19,9 +19,9 @@ one proxy on infrastructure they own and sees every agent immediately.
 
 The entire backend design process of the production system this replicates is described in
 **[How we built agent observability at 100K events/sec](https://dev.to/aishiteru/how-we-built-agent-observability-at-100k-eventssec-pa1)** —
-that article is the real production-level.
+that article describes the real production-level system.
 
-Snapshoots:
+Snapshots:
 
 ![TraceHeatmap — all traces in a window, density by time × latency](docs/img/heatmap.png)
 
@@ -31,18 +31,24 @@ Snapshoots:
 
 *Above: one trace of the misbehaving agent — the amber bars are the model checker catching a prompt injection and the policy engine catching an uncatalogued destination.*
 
-**To start it: make this open-source project fully on your device**
+**To start it: run this open-source project fully on your device**
 
-1. Download to your local
+1. Download to your local machine
 
 ```
-git clone github.com/JamesZengGit/agent-trace-demo.git
+git clone https://github.com/JamesZengGit/agent-trace-demo.git
+cd agent-trace-demo
 ```
 
-2. setup
+2. Set up
 
 ```
 make up      # docker compose up → live dashboard on :3000 in under a minute
+```
+
+3. Optional evidence runs
+
+```
 make bench   # measured capture-path throughput (results in docs/bench/)
 make chaos   # reproduce the 87%-orphan production incident + the fix
 ```
