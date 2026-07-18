@@ -14,6 +14,7 @@ import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import SendIcon from '@mui/icons-material/Send';
+import StopIcon from '@mui/icons-material/Stop';
 import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import AppHeader from './AppHeader';
 import { sendChat, type ChatMessage } from '@/lib/api';
@@ -34,6 +35,14 @@ export default function ChatPageClient() {
   const [notConfigured, setNotConfigured] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
+  // Each send gets a monotonic id; activeReq holds the id whose result the UI
+  // still wants. Stop bumps activeReq so a resolved-but-abandoned request is
+  // dropped — the backend call keeps running server-side, the UI just ignores
+  // it. pendingQuestion lets Stop restore the abandoned text to the composer.
+  const reqCounter = useRef(0);
+  const activeReq = useRef<number | null>(null);
+  const pendingQuestion = useRef('');
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, pending]);
@@ -46,11 +55,16 @@ export default function ChatPageClient() {
       const next = [...messages, { role: 'user' as const, content: q }];
       setMessages(next);
       setInput('');
+      pendingQuestion.current = q;
+      const id = ++reqCounter.current;
+      activeReq.current = id;
       setPending(true);
       try {
         const reply = await sendChat(next);
+        if (activeReq.current !== id) return; // stopped — drop the result
         setMessages((m) => [...m, { role: 'assistant', content: reply }]);
       } catch (e) {
+        if (activeReq.current !== id) return; // stopped — ignore the error too
         const err = e as Error & { status?: number };
         if (err.status === 503) setNotConfigured(true);
         setError(err.message || 'request failed');
@@ -58,11 +72,24 @@ export default function ChatPageClient() {
         setMessages((m) => m.slice(0, -1));
         setInput(q);
       } finally {
-        setPending(false);
+        if (activeReq.current === id) setPending(false);
       }
     },
     [messages, pending],
   );
+
+  // Stop the current query from the UI's point of view: hide its question and
+  // (forthcoming) answer, and return to a ready state. The in-flight API call
+  // is not aborted — its result is simply discarded when it arrives.
+  const stop = useCallback(() => {
+    activeReq.current = null;
+    setPending(false);
+    setError(null);
+    setMessages((m) =>
+      m.length && m[m.length - 1].role === 'user' ? m.slice(0, -1) : m,
+    );
+    setInput(pendingQuestion.current);
+  }, []);
 
   const empty = messages.length === 0;
 
@@ -167,15 +194,29 @@ export default function ChatPageClient() {
             }}
             disabled={pending}
           />
-          <IconButton
-            color="primary"
-            onClick={() => send(input)}
-            disabled={pending || input.trim() === ''}
-            aria-label="send"
-            sx={{ mb: 0.25 }}
-          >
-            <SendIcon />
-          </IconButton>
+          {pending ? (
+            <IconButton
+              onClick={stop}
+              aria-label="stop"
+              sx={{
+                mb: 0.25,
+                bgcolor: '#f1f3f4',
+                '&:hover': { bgcolor: '#e8eaed' },
+              }}
+            >
+              <StopIcon />
+            </IconButton>
+          ) : (
+            <IconButton
+              color="primary"
+              onClick={() => send(input)}
+              disabled={input.trim() === ''}
+              aria-label="send"
+              sx={{ mb: 0.25 }}
+            >
+              <SendIcon />
+            </IconButton>
+          )}
         </Box>
         <Typography
           variant="caption"
