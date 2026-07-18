@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"agenttrace/internal/chat"
 	"agenttrace/internal/model"
 	"agenttrace/internal/otel"
 	"agenttrace/internal/store"
@@ -95,9 +97,10 @@ func (h *hub) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 type api struct {
-	st  *store.Store
-	tr  transport.Transport
-	hub *hub
+	st   *store.Store
+	tr   transport.Transport
+	hub  *hub
+	chat *chat.Engine // nil when OPENAI_API_KEY is unset
 }
 
 func (a *api) parseWindow(r *http.Request) (time.Time, time.Time) {
@@ -186,6 +189,34 @@ func (a *api) trace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"summary": summary, "spans": spans, "behavior_tree": tree})
 }
 
+// chatHandler answers a natural-language question about the trace data. The
+// model reaches the store only through the chat engine's read tools, so every
+// answer is grounded in a real query.
+func (a *api) chatHandler(w http.ResponseWriter, r *http.Request) {
+	if a.chat == nil {
+		http.Error(w, `{"error":"chat is not configured — set OPENAI_API_KEY on the api service"}`, http.StatusServiceUnavailable)
+		return
+	}
+	var req struct {
+		Messages []chat.Message `json:"messages"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+	if len(req.Messages) == 0 {
+		http.Error(w, `{"error":"messages is required"}`, http.StatusBadRequest)
+		return
+	}
+	reply, err := a.chat.Answer(r.Context(), req.Messages)
+	if err != nil {
+		log.Printf("api: chat: %v", err)
+		http.Error(w, `{"error":"the assistant could not answer that request"}`, http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]any{"reply": reply})
+}
+
 // otelIngest converts OTLP/HTTP JSON into native spans and feeds them into
 // the same raw pipeline the collector uses.
 func (a *api) otelIngest(w http.ResponseWriter, r *http.Request) {
@@ -259,6 +290,21 @@ func main() {
 	defer tr.Close()
 
 	a := &api{st: st, tr: tr, hub: newHub()}
+
+	// Chat is optional: enabled only when an API key is present. The base URL
+	// makes the provider swappable — OpenAI today, a self-hosted vLLM server
+	// (OpenAI-compatible) tomorrow, with no code change.
+	if key := env("OPENAI_API_KEY", ""); key != "" {
+		cfg := chat.Config{
+			BaseURL: env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+			APIKey:  key,
+			Model:   env("OPENAI_MODEL", "gpt-4o-mini"),
+		}
+		a.chat = chat.New(cfg, st)
+		log.Printf("chat enabled (model %s, base %s)", cfg.Model, cfg.BaseURL)
+	} else {
+		log.Printf("chat disabled (set OPENAI_API_KEY to enable /api/chat)")
+	}
 	// Unique queue per instance: every api node sees every live event (fanout,
 	// not work-sharing).
 	err = tr.Subscribe(ctx, transport.SubjectSpansProcessed, "api-"+instanceID(),
@@ -276,6 +322,7 @@ func main() {
 	mux.HandleFunc("GET /api/traces/{id}", a.trace)
 	mux.HandleFunc("GET /api/topology", a.topology)
 	mux.HandleFunc("/api/live", a.hub.serve)
+	mux.HandleFunc("POST /api/chat", a.chatHandler)
 	mux.HandleFunc("POST /otel/v1/traces", a.otelIngest)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		a.hub.mu.Lock()

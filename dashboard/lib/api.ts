@@ -131,6 +131,29 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** POST helper mirroring getJson. Surfaces the server's {error} message when present. */
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const j = (await res.json()) as { error?: string };
+      if (j.error) detail = j.error;
+    } catch {
+      /* non-JSON error body */
+    }
+    const err = new Error(detail) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return (await res.json()) as T;
+}
+
 export function fetchMetrics(from: Date, to: Date): Promise<Metrics> {
   const q = new URLSearchParams({
     from: from.toISOString(),
@@ -163,4 +186,24 @@ export function fetchTrace(traceId: string): Promise<TraceDetail> {
 export function fetchTopology(limitAgents = 0): Promise<Topology> {
   const q = limitAgents > 0 ? `?limit_agents=${limitAgents}` : '';
   return getJson<Topology>(`/api/topology${q}`);
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
+ * Ask the assistant a question about the trace data. The backend runs a
+ * tool-calling loop against the real store, so answers are grounded. Send the
+ * full turn history (user/assistant); the server prepends its own system
+ * prompt. Throws with the server's error message (e.g. chat not configured).
+ */
+export async function sendChat(messages: ChatMessage[]): Promise<string> {
+  const body = await postJson<{ reply: string }>('/api/chat', { messages });
+  return body.reply;
 }

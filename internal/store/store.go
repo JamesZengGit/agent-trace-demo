@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -378,4 +379,100 @@ func (s *Store) CountSpans(ctx context.Context) (int, error) {
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(DISTINCT span_id) FROM trace_detail WHERE span_id NOT LIKE 'trace:%'`).Scan(&n)
 	return n, err
+}
+
+// SpanMatch is one hit from SearchSpans: which trace/agent, which captured
+// field matched, and a snippet of the matching value.
+type SpanMatch struct {
+	TraceID string `json:"trace_id"`
+	AgentID string `json:"agent_id"`
+	Field   string `json:"field"`   // detail_name that matched
+	Snippet string `json:"snippet"` // truncated detail_value
+}
+
+// searchFields are the captured payload fields SearchSpans looks inside. The
+// EAV shape makes this a single indexed column scan rather than N column reads.
+var searchFields = []string{
+	"system_prompt", "user_prompt", "response",
+	"request_body", "response_body", "destination",
+}
+
+// SearchSpans is keyword content search over captured span payloads within a
+// time window — the free-text retrieval leg for the chat feature. Case-
+// insensitive substring (ILIKE); the keyword is passed as a parameter (never
+// interpolated), and '%'/'_' in it are escaped so they are treated literally.
+func (s *Store) SearchSpans(ctx context.Context, keyword string, from, to time.Time, limit int) ([]SpanMatch, error) {
+	if keyword == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(keyword)
+	pattern := "%" + esc + "%"
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT d.trace_id, d.agent_id, d.detail_name, d.detail_value
+FROM trace_detail d
+JOIN trace_summary ts ON ts.trace_id = d.trace_id
+WHERE ts.start_time >= $1 AND ts.start_time <= $2
+  AND d.detail_name = ANY($3::text[])
+  AND d.detail_value ILIKE $4 ESCAPE '\'
+ORDER BY ts.start_time DESC
+LIMIT $5`,
+		from, to, pq(searchFields), pattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SpanMatch
+	for rows.Next() {
+		var m SpanMatch
+		var value string
+		if err := rows.Scan(&m.TraceID, &m.AgentID, &m.Field, &value); err != nil {
+			return nil, err
+		}
+		m.Snippet = snippetAround(value, keyword, 160)
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// pq renders a Go string slice as a Postgres text[] literal for ANY(...).
+func pq(items []string) string {
+	return "{" + strings.Join(items, ",") + "}"
+}
+
+// snippetAround returns up to width chars of value centered on the first
+// case-insensitive occurrence of keyword, so a match deep in a long payload
+// is still visible.
+func snippetAround(value, keyword string, width int) string {
+	if len(value) <= width {
+		return value
+	}
+	idx := strings.Index(strings.ToLower(value), strings.ToLower(keyword))
+	if idx < 0 {
+		return value[:width] + "…"
+	}
+	start := idx - width/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + width
+	if end > len(value) {
+		end = len(value)
+		start = end - width
+		if start < 0 {
+			start = 0
+		}
+	}
+	prefix, suffix := "", ""
+	if start > 0 {
+		prefix = "…"
+	}
+	if end < len(value) {
+		suffix = "…"
+	}
+	return prefix + value[start:end] + suffix
 }

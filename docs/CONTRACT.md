@@ -99,6 +99,28 @@ is known.
 ### POST /otel/v1/traces
 OTLP/HTTP JSON ingest adapter (labeled improvement, optional inlet).
 
+### POST /api/chat
+Natural-language questions about the trace data. The backend runs a
+tool-calling loop against an OpenAI-compatible model: the model calls read
+tools (`get_metrics`, `list_traces`, `get_trace`, `get_topology`,
+`search_spans`) that map to the store, so every answer is grounded in a real
+query — nothing is invented. Send the full turn history; the server prepends
+its own system prompt.
+```json
+// request
+{ "messages": [ { "role": "user" | "assistant", "content": "..." } ] }
+// response
+{ "reply": "inventory-sync had 5 warnings; on trace tr_… it followed a prompt injection…" }
+```
+Returns **503** `{"error":"chat is not configured…"}` when `OPENAI_API_KEY` is
+unset, and **502** if the model call fails. Enabled by three env vars on the
+api service:
+- `OPENAI_API_KEY` — required to enable chat (server-side only; never sent to the browser).
+- `OPENAI_BASE_URL` — default `https://api.openai.com/v1`. Point at a
+  self-hosted vLLM server (`http://vllm:8000/v1`) to switch providers with no
+  code change — same chat-completions + tools protocol.
+- `OPENAI_MODEL` — default `gpt-4o-mini`.
+
 ## Dashboard realtime model (confirmed)
 
 Hybrid: HTTP loads the focus window (re-query on every window/filter change);

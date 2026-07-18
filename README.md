@@ -302,6 +302,18 @@ Details and the full incident narrative: [docs/chaos.md](docs/chaos.md).
   JSON (honoring GenAI semantic conventions) into native spans. An optional
   inlet for teams already emitting OTel; the zero-code-change native path
   stays the headline.
+- **Chat over the trace data** (`internal/chat`, `POST /api/chat`, the **Chat**
+  page) — ask questions in plain English ("which agent had the most warnings,
+  and what did it do?"). Retrieval is **structured tool-calling, not embedding
+  RAG**: the model calls read tools (`get_metrics`, `list_traces`, `get_trace`,
+  `get_topology`, `search_spans`) that map to real store queries, so every
+  number and trace ID in an answer came from a query it ran — it can't
+  hallucinate them. Provider is swappable by base URL: **OpenAI now, a
+  self-hosted vLLM server later** (same chat-completions + tools protocol, no
+  code change). Set `OPENAI_API_KEY` in a `.env` file to enable it; the key is
+  server-side and never reaches the browser. Embeddings/vector search are the
+  labeled future upgrade to `search_spans`, added only when fuzzy semantic
+  retrieval is actually needed.
 
 ## Replica notes: what is faithful, what is labeled
 

@@ -61,6 +61,12 @@ services:
     environment:
       NATS_URL: nats://nats:4222
       POSTGRES_DSN: postgres://agenttrace:agenttrace@postgres:5432/agenttrace
+      # Chat feature. Set OPENAI_API_KEY in a local .env file to enable /api/chat.
+      # OPENAI_BASE_URL makes the provider swappable: OpenAI now, a self-hosted
+      # vLLM server (http://vllm:8000/v1) later — same protocol, no code change.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     ports: ["7000:7000"]
     depends_on:
       postgres: {condition: service_healthy}

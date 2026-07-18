@@ -6,3 +6,4 @@ docs/bench/*.csv
 docs/chaos/*.json
 *.log
 docs/log.md
+.env
