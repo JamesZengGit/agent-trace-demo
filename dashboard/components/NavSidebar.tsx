@@ -23,8 +23,8 @@ interface Item {
 }
 
 const items: Item[] = [
-  { href: '/', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
   { href: '/chat', label: 'Chat', Icon: ChatBubbleOutlineOutlinedIcon },
+  { href: '/', label: 'Dashboard', Icon: SpaceDashboardOutlinedIcon },
 ];
 
 export default function NavSidebar() {

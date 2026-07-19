@@ -15,10 +15,16 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
+import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import AppHeader from './AppHeader';
 import { sendChat, type ChatMessage } from '@/lib/api';
 import { GOOGLE_BLUE, TEXT_SECONDARY, BORDER_GRAY } from '@/lib/theme';
+
+// A thread entry: a chat message plus UI-only metadata. `stopped` marks a
+// question the user abandoned — it stays visible with a mark but is excluded
+// from the context sent to the assistant.
+type ChatEntry = ChatMessage & { stopped?: boolean };
 
 const EXAMPLES = [
   'Which agent has the most warnings, and what did it do?',
@@ -28,7 +34,7 @@ const EXAMPLES = [
 ];
 
 export default function ChatPageClient() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +44,9 @@ export default function ChatPageClient() {
   // Each send gets a monotonic id; activeReq holds the id whose result the UI
   // still wants. Stop bumps activeReq so a resolved-but-abandoned request is
   // dropped — the backend call keeps running server-side, the UI just ignores
-  // it. pendingQuestion lets Stop restore the abandoned text to the composer.
+  // it.
   const reqCounter = useRef(0);
   const activeReq = useRef<number | null>(null);
-  const pendingQuestion = useRef('');
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,15 +57,21 @@ export default function ChatPageClient() {
       const q = text.trim();
       if (!q || pending) return;
       setError(null);
-      const next = [...messages, { role: 'user' as const, content: q }];
-      setMessages(next);
+      // The context sent to the assistant excludes any stopped exchanges — a
+      // question the user abandoned never becomes part of the conversation the
+      // model sees.
+      const context: ChatMessage[] = messages
+        .filter((m) => !m.stopped)
+        .map(({ role, content }) => ({ role, content }));
+      context.push({ role: 'user', content: q });
+
+      setMessages((m) => [...m, { role: 'user', content: q }]);
       setInput('');
-      pendingQuestion.current = q;
       const id = ++reqCounter.current;
       activeReq.current = id;
       setPending(true);
       try {
-        const reply = await sendChat(next);
+        const reply = await sendChat(context);
         if (activeReq.current !== id) return; // stopped — drop the result
         setMessages((m) => [...m, { role: 'assistant', content: reply }]);
       } catch (e) {
@@ -78,164 +89,215 @@ export default function ChatPageClient() {
     [messages, pending],
   );
 
-  // Stop the current query from the UI's point of view: hide its question and
-  // (forthcoming) answer, and return to a ready state. The in-flight API call
-  // is not aborted — its result is simply discarded when it arrives.
+  // Stop the current query. The question stays in the thread with a clear
+  // "stopped" mark (not deleted), and — being marked — it is excluded from the
+  // context of every later question. The in-flight API call is not aborted;
+  // its result is simply discarded when it arrives.
   const stop = useCallback(() => {
     activeReq.current = null;
     setPending(false);
     setError(null);
-    setMessages((m) =>
-      m.length && m[m.length - 1].role === 'user' ? m.slice(0, -1) : m,
-    );
-    setInput(pendingQuestion.current);
+    setMessages((m) => {
+      if (!m.length || m[m.length - 1].role !== 'user') return m;
+      const copy = m.slice();
+      copy[copy.length - 1] = { ...copy[copy.length - 1], stopped: true };
+      return copy;
+    });
   }, []);
 
   const empty = messages.length === 0;
+
+  const composer = (
+    <Composer
+      input={input}
+      setInput={setInput}
+      onSend={() => send(input)}
+      onStop={stop}
+      pending={pending}
+    />
+  );
+
+  const configNotice = notConfigured && (
+    <Alert severity="info" sx={{ mb: 2, textAlign: 'left' }}>
+      Chat is not configured on the server. Set <code>OPENAI_API_KEY</code> on
+      the api service (a <code>.env</code> file with
+      <code> OPENAI_API_KEY=sk-…</code>, then <code>make up</code>) to enable it.
+    </Alert>
+  );
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <AppHeader />
 
-      <Box sx={{ flex: 1, overflowY: 'auto' }}>
-        <Box sx={{ maxWidth: 760, mx: 'auto', px: 2, py: 3 }}>
-          {notConfigured && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Chat is not configured on the server. Set <code>OPENAI_API_KEY</code>{' '}
-              on the api service (a <code>.env</code> file with
-              <code> OPENAI_API_KEY=sk-…</code>, then <code>make up</code>) to
-              enable it.
-            </Alert>
-          )}
-
-          {empty ? (
-            <Box sx={{ textAlign: 'center', mt: 8 }}>
-              <ChatBubbleOutlineOutlinedIcon
-                sx={{ fontSize: 40, color: GOOGLE_BLUE, mb: 1 }}
-              />
-              <Typography sx={{ fontSize: 22, fontWeight: 500, mb: 0.5 }}>
-                Ask about your agent traces
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Answers are grounded in captured trace data — the assistant runs
-                real queries, it doesn’t guess.
-              </Typography>
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 1,
-                  justifyContent: 'center',
-                }}
-              >
-                {EXAMPLES.map((ex) => (
-                  <Chip
-                    key={ex}
-                    label={ex}
-                    variant="outlined"
-                    onClick={() => send(ex)}
-                    sx={{
-                      cursor: 'pointer',
-                      fontWeight: 400,
-                      borderColor: BORDER_GRAY,
-                      '&:hover': { bgcolor: '#f1f3f4' },
-                    }}
-                  />
-                ))}
-              </Box>
-            </Box>
-          ) : (
-            messages.map((m, i) => <Bubble key={i} message={m} />)
-          )}
-
-          {pending && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 2 }}>
-              <CircularProgress size={16} />
-              <Typography variant="body2" color="text.secondary">
-                thinking…
-              </Typography>
-            </Box>
-          )}
-          {error && !notConfigured && (
-            <Alert severity="error" sx={{ mt: 1 }}>
-              {error}
-            </Alert>
-          )}
-          <div ref={endRef} />
-        </Box>
-      </Box>
-
-      {/* Composer */}
-      <Box sx={{ borderTop: `1px solid ${BORDER_GRAY}`, bgcolor: '#fff' }}>
+      {empty ? (
+        // Landing state: greeting + the input box centered in the middle, like
+        // a home page. The same input becomes the bottom composer once the
+        // conversation starts.
         <Box
           sx={{
-            maxWidth: 760,
-            mx: 'auto',
-            px: 2,
-            py: 1.5,
+            flex: 1,
+            overflowY: 'auto',
             display: 'flex',
-            gap: 1,
-            alignItems: 'flex-end',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            px: 2,
           }}
         >
-          <TextField
-            fullWidth
-            multiline
-            maxRows={6}
-            size="small"
-            placeholder="Ask about agents, traces, errors, warnings…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send(input);
-              }
-            }}
-            disabled={pending}
-          />
-          {pending ? (
-            <IconButton
-              onClick={stop}
-              aria-label="stop"
+          <Box sx={{ width: '100%', maxWidth: 640, textAlign: 'center' }}>
+            {configNotice}
+            <ChatBubbleOutlineOutlinedIcon
+              sx={{ fontSize: 40, color: GOOGLE_BLUE, mb: 1 }}
+            />
+            <Typography sx={{ fontSize: 24, fontWeight: 500, mb: 0.5 }}>
+              Ask about your agent traces
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Answers are grounded in captured trace data — the assistant runs
+              real queries, it doesn’t guess.
+            </Typography>
+
+            {composer}
+
+            <Box
               sx={{
-                mb: 0.25,
-                bgcolor: '#f1f3f4',
-                '&:hover': { bgcolor: '#e8eaed' },
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 1,
+                justifyContent: 'center',
+                mt: 2.5,
               }}
             >
-              <StopIcon />
-            </IconButton>
-          ) : (
-            <IconButton
-              color="primary"
-              onClick={() => send(input)}
-              disabled={input.trim() === ''}
-              aria-label="send"
-              sx={{ mb: 0.25 }}
-            >
-              <SendIcon />
-            </IconButton>
-          )}
+              {EXAMPLES.map((ex) => (
+                <Chip
+                  key={ex}
+                  label={ex}
+                  variant="outlined"
+                  onClick={() => send(ex)}
+                  sx={{
+                    cursor: 'pointer',
+                    fontWeight: 400,
+                    borderColor: BORDER_GRAY,
+                    '&:hover': { bgcolor: '#f1f3f4' },
+                  }}
+                />
+              ))}
+            </Box>
+            {error && !notConfigured && (
+              <Alert severity="error" sx={{ mt: 2, textAlign: 'left' }}>
+                {error}
+              </Alert>
+            )}
+          </Box>
         </Box>
-        <Typography
-          variant="caption"
-          sx={{ display: 'block', textAlign: 'center', color: TEXT_SECONDARY, pb: 1 }}
-        >
-          Enter to send · Shift+Enter for a new line
-        </Typography>
-      </Box>
+      ) : (
+        <>
+          <Box sx={{ flex: 1, overflowY: 'auto' }}>
+            <Box sx={{ maxWidth: 760, mx: 'auto', px: 2, py: 3 }}>
+              {configNotice}
+              {messages.map((m, i) => (
+                <Bubble key={i} message={m} />
+              ))}
+              {pending && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 2 }}>
+                  <CircularProgress size={16} />
+                  <Typography variant="body2" color="text.secondary">
+                    thinking…
+                  </Typography>
+                </Box>
+              )}
+              {error && !notConfigured && (
+                <Alert severity="error" sx={{ mt: 1 }}>
+                  {error}
+                </Alert>
+              )}
+              <div ref={endRef} />
+            </Box>
+          </Box>
+
+          {/* Composer pinned at the bottom once the conversation has started. */}
+          <Box sx={{ borderTop: `1px solid ${BORDER_GRAY}`, bgcolor: '#fff' }}>
+            <Box sx={{ maxWidth: 760, mx: 'auto', px: 2, py: 1.5 }}>{composer}</Box>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
+// Composer is the input row (text field + send/stop) plus the key hint. It is
+// rendered centered on the landing state and pinned at the bottom afterward.
+function Composer({
+  input,
+  setInput,
+  onSend,
+  onStop,
+  pending,
+}: {
+  input: string;
+  setInput: (v: string) => void;
+  onSend: () => void;
+  onStop: () => void;
+  pending: boolean;
+}) {
+  return (
+    <Box sx={{ width: '100%' }}>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+        <TextField
+          fullWidth
+          multiline
+          maxRows={6}
+          size="small"
+          placeholder="Ask about agents, traces, errors, warnings…"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              onSend();
+            }
+          }}
+          disabled={pending}
+        />
+        {pending ? (
+          <IconButton
+            onClick={onStop}
+            aria-label="stop"
+            sx={{ mb: 0.25, bgcolor: '#f1f3f4', '&:hover': { bgcolor: '#e8eaed' } }}
+          >
+            <StopIcon />
+          </IconButton>
+        ) : (
+          <IconButton
+            color="primary"
+            onClick={onSend}
+            disabled={input.trim() === ''}
+            aria-label="send"
+            sx={{ mb: 0.25 }}
+          >
+            <SendIcon />
+          </IconButton>
+        )}
+      </Box>
+      <Typography
+        variant="caption"
+        sx={{ display: 'block', textAlign: 'center', color: TEXT_SECONDARY, pt: 0.75 }}
+      >
+        Enter to send · Shift+Enter for a new line
+      </Typography>
+    </Box>
+  );
+}
+
+function Bubble({ message }: { message: ChatEntry }) {
   const isUser = message.role === 'user';
+  const stopped = !!message.stopped;
   return (
     <Box
       sx={{
         display: 'flex',
-        justifyContent: isUser ? 'flex-end' : 'flex-start',
+        flexDirection: 'column',
+        alignItems: isUser ? 'flex-end' : 'flex-start',
         mb: 1.5,
       }}
     >
@@ -244,8 +306,9 @@ function Bubble({ message }: { message: ChatMessage }) {
           px: 1.75,
           py: 1.25,
           maxWidth: '85%',
-          bgcolor: isUser ? '#e8f0fe' : '#ffffff',
-          border: `1px solid ${isUser ? '#d2e3fc' : BORDER_GRAY}`,
+          bgcolor: stopped ? '#f1f3f4' : isUser ? '#e8f0fe' : '#ffffff',
+          border: `1px solid ${stopped ? BORDER_GRAY : isUser ? '#d2e3fc' : BORDER_GRAY}`,
+          opacity: stopped ? 0.75 : 1,
         }}
       >
         <Typography
@@ -255,12 +318,20 @@ function Bubble({ message }: { message: ChatMessage }) {
             lineHeight: 1.6,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            color: '#202124',
+            color: stopped ? TEXT_SECONDARY : '#202124',
           }}
         >
           {message.content}
         </Typography>
       </Paper>
+      {stopped && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+          <StopCircleOutlinedIcon sx={{ fontSize: 15, color: TEXT_SECONDARY }} />
+          <Typography variant="caption" sx={{ color: TEXT_SECONDARY }}>
+            Stopped — not sent to the assistant
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 }
