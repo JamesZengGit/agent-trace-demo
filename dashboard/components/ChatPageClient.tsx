@@ -10,12 +10,14 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
+import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import AppHeader from './AppHeader';
 import { sendChat, type ChatMessage } from '@/lib/api';
@@ -25,6 +27,10 @@ import { GOOGLE_BLUE, TEXT_SECONDARY, BORDER_GRAY } from '@/lib/theme';
 // question the user abandoned — it stays visible with a mark but is excluded
 // from the context sent to the assistant.
 type ChatEntry = ChatMessage & { stopped?: boolean };
+
+// The conversation is persisted here so a browser refresh restores it (per
+// tab; cleared with "New chat" or when the tab closes).
+const STORAGE_KEY = 'agenttrace.chat.thread';
 
 const EXAMPLES = [
   'Which agent has the most warnings, and what did it do?',
@@ -47,6 +53,30 @@ export default function ChatPageClient() {
   // it.
   const reqCounter = useRef(0);
   const activeReq = useRef<number | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Restore the thread after mount (sessionStorage is browser-only, so this
+  // runs client-side to avoid a hydration mismatch).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) setMessages(JSON.parse(raw) as ChatEntry[]);
+    } catch {
+      /* ignore corrupt/absent storage */
+    }
+    setHydrated(true);
+  }, []);
+
+  // Persist the thread on every change, once hydrated (so the initial empty
+  // state doesn't overwrite a saved thread before it's restored).
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      /* storage full or unavailable — non-fatal */
+    }
+  }, [messages, hydrated]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -105,6 +135,21 @@ export default function ChatPageClient() {
     });
   }, []);
 
+  // Start a fresh conversation: abandon any in-flight request, clear the
+  // thread and its saved copy, and return to the landing state.
+  const newChat = useCallback(() => {
+    activeReq.current = null;
+    setPending(false);
+    setError(null);
+    setMessages([]);
+    setInput('');
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
   const empty = messages.length === 0;
 
   const composer = (
@@ -127,7 +172,20 @@ export default function ChatPageClient() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <AppHeader />
+      <AppHeader
+        action={
+          !empty ? (
+            <Button
+              size="small"
+              startIcon={<AddCommentOutlinedIcon />}
+              onClick={newChat}
+              sx={{ textTransform: 'none', color: TEXT_SECONDARY }}
+            >
+              New chat
+            </Button>
+          ) : undefined
+        }
+      />
 
       {empty ? (
         // Landing state: greeting + the input box centered in the middle, like

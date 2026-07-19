@@ -8,7 +8,13 @@ import Chip from '@mui/material/Chip';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import { GOOGLE_BLUE } from '@/lib/theme';
 
-export default function AppHeader({ live }: { live?: boolean }) {
+export default function AppHeader({
+  live,
+  action,
+}: {
+  live?: boolean;
+  action?: React.ReactNode;
+}) {
   return (
     <AppBar position="sticky">
       <Toolbar variant="dense" sx={{ minHeight: 56 }}>
@@ -20,6 +26,7 @@ export default function AppHeader({ live }: { live?: boolean }) {
           network-layer agent observability
         </Typography>
         <Box sx={{ flex: 1 }} />
+        {action}
         {live !== undefined && (
           <Chip
             size="small"
